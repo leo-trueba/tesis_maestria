@@ -126,6 +126,17 @@ join_phyloseq <- function(obj_phyloseq, var, metadatos=info, seleccion=muestras)
 
 ```
 
+Reemplazo de los nombres de los tratamientos
+
+```{r}
+
+
+dict_tratamientos <- c("Control", "S2", "S3", "S4")
+names(dict_tratamientos) <- c("C75", "S2", "S3", "S4")
+
+
+```
+
 ## Diversidad alfa
 
 Calcular diversidad alfa, añadiendo el índice de Pielou de acuerdo con 
@@ -162,9 +173,9 @@ for (medida in medidas_diversidad){
   lista_medida[[2]] <- varianza
   lista_medida[[3]] <- summary(anova_medida)
 
-  valor_p <- (unlist(summary(anova_medida)))["Pr(>F)1"]
+  valor_p <- (unlist(summary(anova_medida)))[c("Pr(>F)1","Pr(>F)2","Pr(>F)3")]
 
-  if(normalidad$p.value >= 0.05 & varianza$p.value >= 0.05 & valor_p < 0.05) {
+  if(normalidad$p.value >= 0.05 & varianza$p.value >= 0.05 & sum(valor_p < 0.05) > 0) {
     post_hoc <- TukeyHSD(anova_medida) %>% tidy() %>% filter(adj.p.value < 0.05)
     lista_medida[[4]] <- post_hoc
   }
@@ -172,16 +183,24 @@ for (medida in medidas_diversidad){
 }
 
 
+coords_categorias <- read_csv("coords_categorias.csv") %>% 
+	select(coords, grupo)
+
+jerarquias <- data.frame(gen_min = c("S", "S", "S", "G1", "G1", "G2"), 
+                         gen_max = c("G1", "G2", "G3", "G2", "G3", "G3"), 
+                         jerarquia = seq(1.08, 1.48, .08))
+
+
 signif_observed <- anova_diversidad[["Observed"]][[4]] %>%
-  filter(term == "generacion:tratamiento") %>%
+  filter(term == "generacion:tratamiento") %>% 
       separate_wider_delim(cols = contrast, delim = "-", 
-                           names = c("comp1", "comp2")) %>%
+                           names = c("comp1", "comp2")) %>% 
       separate_wider_delim(cols = comp1, delim = ":", 
                            names = c("generacion1", "tratamiento1"), cols_remove = FALSE) %>%
       separate_wider_delim(cols = comp2, delim = ":", 
-                           names = c("generacion2", "tratamiento2"), cols_remove = FALSE) %>%
+                           names = c("generacion2", "tratamiento2"), cols_remove = FALSE) %>% 
       left_join(coords_categorias, by = join_by("comp1" == "grupo")) %>%
-      left_join(coords_categorias, by = join_by("comp2" == "grupo"), suffix = c("1", "2")) %>%
+      left_join(coords_categorias, by = join_by("comp2" == "grupo"), suffix = c("1", "2")) %>% 
       mutate(xmin = ifelse(coords1 < coords2, coords1, coords2), 
              xmax = ifelse(coords1 < coords2, coords2, coords1), 
              max = 6000, 
@@ -191,13 +210,13 @@ signif_observed <- anova_diversidad[["Observed"]][[4]] %>%
              tipo = ifelse(tratamiento1 == tratamiento2, "dentro", 
                            ifelse(generacion1 == generacion2, "entre_gens", "invalido")),
              anotacion = ifelse(adj.p.value < 0.05  & adj.p.value >= 0.01, "*", 
-                                ifelse(adj.p.value < 0.01 & adj.p.value >= 0.001, "**", "***"))) %>%
-      separate_wider_delim(cols = orden, delim = ":", names = c("orden_gen", "orden_trat")) %>%
+                                ifelse(adj.p.value < 0.01 & adj.p.value >= 0.001, "**", "***"))) %>% 
+      separate_wider_delim(cols = orden, delim = ":", names = c("orden_gen", "orden_trat"))  %>% 
       mutate(orden_gen = factor(orden_gen, levels = c("S", "G1", "G2", "G3"), ordered = TRUE), 
              orden_trat = factor(orden_trat, levels = c("S2", "S3", "S4"), ordered = TRUE)) %>%
       arrange(orden_gen, orden_trat) %>%
       left_join(jerarquias, by = join_by("gen_min", "gen_max")) %>%
-      filter(tipo != "invalido") %>%
+      filter(tipo != "invalido") %>% 
       mutate(y_dentro = max * jerarquia, 
              y_entre = ifelse( tipo == "entre_gens", 
                               seq(from = (unique(max) * 1.5), 
@@ -320,7 +339,7 @@ tabla_phylum_clase %>%
   scale_fill_gradient(low = "#e4e4e4ff", high = "#052629ff", 
                       na.value = "steelblue4", trans = "log10") +
   facet_grid(~tratamiento, scales = "free_x", space = "free_x") +
-  scale_y_discrete(labels = dict_phylum)+
+  scale_y_discrete(labels = dict_categoria)+
   scale_x_discrete(labels = NULL)+
   labs(y = NULL, x = NULL, fill = "Abundancia\nrelativa") +
   theme_linedraw() +
@@ -344,9 +363,8 @@ más abundantes
 
 ```{r}
 
+
 todos_phyla <- orden_categoria$categoria[1:10]
-
-
 pruebas_phylum <- list()
 for (nivel in todos_phyla) {
 
@@ -370,15 +388,6 @@ Gráficas de abundancia de  Alfaproteobacteria, Gammaproteobacteria,
 Cyanobaceriota y Planctomycetota
 
 ```{r}
-
-coords <- c(seq(0.72, 1.28, 0.56/3),
-            seq(1.72, 2.28, 0.56/3),
-            seq(2.72, 3.28, 0.56/3),
-            seq(3.75, 4.25, .25))
-
-jerarquias <- data.frame(gen_min = c("S", "S", "S", "G1", "G1", "G2"), 
-                         gen_max = c("G1", "G2", "G3", "G2", "G3", "G3"), 
-                         jerarquia = seq(1.08, 1.48, .08))
 
 phyla_seleccionados <- c("c__Alphaproteobacteria", "c__Gammaproteobacteria", 
                          "p__Cyanobacteriota", "p__Planctomycetota")
@@ -489,7 +498,7 @@ ggsave(plot = plot_phyla_seleccionados, filename = "figuras/abundancia_phyla_sel
 ```
 
 
-Gráficas para los 10  grupos más abundantes (Suplementarias)
+Gráficas para los 10  grupos más abundantes (Suplementaria)
 
 ```{r}
 
@@ -607,6 +616,11 @@ ab_rel_otus <- transform_sample_counts(tomate_raw, function(x) x/sum(x))
 tabla_ab_rel_otus <- join_phyloseq(ab_rel_otus, "ab_rel") %>%
   left_join(tax_sub, by = "OTU")
 
+orden_ab_otus <- tabla_ab_rel_otus %>% 
+group_by(OTU) %>% 
+summarise(prom_ab = mean(ab_rel)) %>% 
+arrange(desc(prom_ab))
+
 ```
 
 ## Diversidad beta
@@ -649,12 +663,12 @@ ggsave("figuras/pcoa_UniFrac_unw.svg", height = 12, width = 16, units = "cm",
 ### Efectos separados
 
 adonis2(formula = dist_UniFrac_unw ~ generacion + tratamiento,
-	data = muestras_adonis,
+	data = info,
 	permutations = 9999, by = "margin") %>% tidy()
 
 ### Interacción
 adonis2(formula = dist_UniFrac_unw ~ generacion:tratamiento,
-	data = muestras_adonis,
+	data = info,
 	permutations = 9999, by = "margin") %>% tidy()
 
 
@@ -710,6 +724,7 @@ ord_cap_unw <- ordinate(sub_cap, method = "CAP", distance = UniFrac_cap_unw,
 ```
 
 ### Pruebas estadísticas
+
 ```{r}
 
 # UniFrac Ponderado
@@ -920,6 +935,9 @@ grupos <- sample_data(otus_por_gen)$grupo_generacion
 sample_data(otus_por_gen)$tratamiento <- str_replace(grupos, ".+_", "")
 sample_data(otus_por_gen)$generacion <- str_replace(grupos, "_.+", "")
 
+sample_data(otus_por_gen)$replica <- NULL
+sample_data(otus_por_gen)$grupo_generacion_muestra <- NULL
+
 sample_data(otus_por_gen)
 
 ```
@@ -954,13 +972,13 @@ Gráficas de géneros sobrerepresentados en controles y tratamientos
 
 deseq_cont_df <- do.call(rbind, deseq_controles_gen)
 
-deseq_cont_df %>%
-  filter(padj < 0.05, log2FoldChange < 0) %>%
-  left_join(tax_sub, by = "OTU") %>%
-  select(OTU, tax_completa, genero_sub, baseMean:generacion) %>%
-  dplyr::count(genero_sub, generacion) %>%
-  arrange(generacion, desc(n)) %>%
-  write_tsv("tablas/generos_sob_controles.tsv")
+#deseq_cont_df %>%
+#  filter(padj < 0.05, log2FoldChange < 0) %>%
+#  left_join(tax_sub, by = "OTU") %>%
+#  select(OTU, tax_completa, genero_sub, baseMean:generacion) %>%
+#  dplyr::count(genero_sub, generacion) %>%
+#  arrange(generacion, desc(n)) %>%
+#  write_tsv("tablas/generos_sob_controles.tsv")
 
 tax_mod <- tax %>%
   mutate(categoria = ifelse(Phylum == "p__Pseudomonadota", Class, Phylum)) 
@@ -1403,12 +1421,13 @@ la generación en donde ocurrió el enriquecimiento
 
 tabla_ab_rel_otus %>%
   filter(OTU %in% sub_otus_sob, 
-         tratamiento != "C75") %>%
+         tratamiento != "C75") %>% 
   left_join(orden_ab_otus, by = "OTU") %>%
-  left_join(div_otus_sob, by = "OTU") %>%
+  left_join(div_otus_sob, by = "OTU") %>% 
   mutate(grupo_generacion_muestra = factor(grupo_generacion_muestra, 
                                            levels = orden_grupos, 
-                                           ordered = TRUE)) %>%
+                                           ordered = TRUE)) %>% pull(grupo_generacion_muestra)
+
   ggplot(aes(x = grupo_generacion_muestra,
              y = reorder(OTU, prom_ab),
              fill = ab_rel)) + 
@@ -1490,15 +1509,13 @@ Gráfica de abundancia relativa y mapa de calor mostrando log2FoldChange
 
 ```{r}
 
-sob_nucleo <- nucleo_tratamientos[nucleo_tratamientos %in% otus_sob_trat]
+sob_nucleo <- otus_nucleo_tratamientos[otus_nucleo_tratamientos %in% otus_sob_trat]
 
 orden_sob_nucleo <- tabla_ab_rel_otus %>%
   filter(OTU %in% sob_nucleo) %>%
   group_by(OTU) %>%
   summarise(prom_ab = mean(ab_rel)) %>%
   arrange(desc(prom_ab))
-
-
 
 ab_rel_nucleo_sob <- tabla_ab_rel_otus %>%
   filter(OTU %in% sob_nucleo, 
